@@ -81,8 +81,9 @@
     </ol>
   </div>
 </main>
+<script src="config.js"></script>
 <script>
-(function(){
+(async function(){
   // Token comes from /r/<token> (served via 404.html on GitHub Pages) or ?t=<token>.
   var token = "";
   var m = location.pathname.match(/\/r\/([A-Za-z0-9\-_]+)/);
@@ -91,11 +92,22 @@
     var q = new URLSearchParams(location.search).get("t");
     if (q) token = q;
   }
+  var useBackend = !!(window.TR_USE_BACKEND && window.TR_FUNCTIONS_BASE && token);
   var msg = document.getElementById("tokenMsg");
   if (token) {
     msg.innerHTML = "Link OK — recovery ID <code>" +
       token.slice(0, 6) + "&hellip;" + token.slice(-4) +
       "</code>. Continue below.";
+    // Fail fast on dead/unknown links when backend is live (no data before PIN).
+    if (useBackend) {
+      try {
+        var r = await fetch(window.TR_FUNCTIONS_BASE + "/resolve-token", {
+          method: "POST", headers: {"content-type":"application/json"},
+          body: JSON.stringify({ token: token })
+        });
+        if (!r.ok) msg.textContent = "This link looks invalid or expired. Check the QR or contact the account holder.";
+      } catch (e) { msg.textContent = "Cannot reach the recovery service. Check connection and retry."; }
+    }
   } else {
     msg.innerHTML = "Opened without a recovery link. Scan your QR to arrive with a link, " +
       "or <a href='?t=demo-token'>try the demo link</a>.";
@@ -109,13 +121,44 @@
     btn.disabled = pin.value.length !== 6;
     err.hidden = true;
   });
-  btn.addEventListener("click", function(){
+  btn.addEventListener("click", async function(){
     if (pin.value.length !== 6) { err.hidden = false; return; }
-    document.getElementById("pinCard").hidden = true;
-    ticket.hidden = false;
-    ticket.scrollIntoView({behavior:"smooth"});
+    err.hidden = true;
+    if (!useBackend) {
+      // Demo mode: any 6 digits unlock the sample.
+      document.getElementById("pinCard").hidden = true;
+      ticket.hidden = false;
+      ticket.scrollIntoView({behavior:"smooth"});
+      return;
+    }
+    btn.disabled = true;
+    try {
+      var r = await fetch(window.TR_FUNCTIONS_BASE + "/verify-pin", {
+        method: "POST", headers: {"content-type":"application/json"},
+        body: JSON.stringify({ token: token, pin: pin.value })
+      });
+      if (!r.ok) { err.textContent = "Invalid link or PIN."; err.hidden = false; btn.disabled = false; return; }
+      var data = await r.json();
+      var list = data.tickets || [];
+      if (!list.length) { err.textContent = "No ticket is currently available in the recovery window."; err.hidden = false; btn.disabled = false; return; }
+      // Single-eligible: show first ticket image served per-session (no-store).
+      var t = list[0];
+      document.getElementById("pinCard").hidden = true;
+      ticket.hidden = false;
+      var img = "<img alt='Recovered ticket' style='max-width:100%;border-radius:8px' src='" +
+        window.TR_FUNCTIONS_BASE + "/ticket-view?ticket=" + encodeURIComponent(t.id) + "'>";
+      ticket.querySelector(".ticket").innerHTML = img +
+        "<div class='small'>" + t.origin + " &rarr; " + t.destination + "</div>";
+      ticket.scrollIntoView({behavior:"smooth"});
+    } catch (e) {
+      err.textContent = "Cannot reach the recovery service. Check connection and retry.";
+      err.hidden = false; btn.disabled = false;
+    }
   });
-  document.getElementById("endBtn").addEventListener("click", function(){
+  document.getElementById("endBtn").addEventListener("click", async function(){
+    if (useBackend) {
+      try { await fetch(window.TR_FUNCTIONS_BASE + "/end-session", { method: "POST" }); } catch (e) {}
+    }
     pin.value = "";
     btn.disabled = true;
     ticket.hidden = true;
