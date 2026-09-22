@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>TicketRescue — Borrowed-phone recovery (prototype)</title>
+<style>
+  :root{
+    --bg:#F7F8FA; --card:#FFFFFF; --text:#172033; --muted:#667085;
+    --primary:#1677FF; --success:#16A36A; --border:#E4E7EC;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  main{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin:14px 0}
+  h1{font-size:28px;margin:8px 0 4px}
+  h2{font-size:19px;margin:0 0 8px}
+  p{line-height:1.5;margin:8px 0}
+  .muted{color:var(--muted)}
+  .small{font-size:13px}
+  label{display:block;font-weight:600;margin:12px 0 6px}
+  input[type=password],input[type=text]{width:100%;font-size:22px;letter-spacing:6px;text-align:center;
+    padding:12px;border:1.5px solid var(--border);border-radius:10px}
+  input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(22,119,255,.2)}
+  button{width:100%;font-size:17px;font-weight:700;border:none;border-radius:999px;
+    padding:13px;margin-top:12px;cursor:pointer}
+  .primary{background:var(--primary);color:#fff}
+  .ghost{background:#EEF1F5;color:var(--text);border:1px solid var(--border)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .error{color:#B42318;font-size:14px;margin-top:8px}
+  .ticket{border:2px dashed var(--border);border-radius:12px;padding:16px;text-align:center}
+  .barcode{font-family:monospace;font-size:26px;letter-spacing:4px;background:#fff;
+    border:1px solid var(--border);border-radius:8px;padding:14px 6px;margin:10px 0;overflow-x:auto;white-space:nowrap}
+  .ok{color:var(--success);font-weight:700}
+  code{background:#EEF1F5;padding:2px 6px;border-radius:6px;font-size:13px;word-break:break-all}
+  ol.steps{margin:8px 0;padding-left:22px;line-height:1.7}
+</style>
+</head>
+<body>
+<main>
+  <p class="muted small">TicketRescue &middot; borrowed-phone recovery</p>
+  <h1>Recover a ticket</h1>
+  <p class="muted">Scan the permanent QR on any phone, enter the 6-digit recovery PIN. No app to install.</p>
+
+  <div class="card" id="tokenCard">
+    <h2>1 &middot; Link check</h2>
+    <p id="tokenMsg" class="muted">Checking link&hellip;</p>
+  </div>
+
+  <div class="card" id="pinCard">
+    <h2>2 &middot; Enter recovery PIN</h2>
+    <p class="muted small">Prototype: any 6 digits unlocks the sample ticket. The real service checks your PIN on the server with rate limits.</p>
+    <label for="pin">6-digit PIN</label>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="one-time-code"
+           maxlength="6" placeholder="••••••" aria-label="6-digit recovery PIN">
+    <button class="primary" id="unlockBtn" disabled>Unlock ticket</button>
+    <p class="error" id="pinErr" hidden>Enter 6 digits.</p>
+  </div>
+
+  <div class="card" id="ticketCard" hidden>
+    <h2>3 &middot; Sample ticket <span class="ok">&#10003; prototype</span></h2>
+    <div class="ticket">
+      <div><strong>Derby &rarr; Leeds</strong></div>
+      <div class="muted small">Anytime Return &middot; Adult &middot; via Sheffield</div>
+      <div class="barcode" aria-label="Sample barcode">|||&nbsp;||&nbsp;||||&nbsp;|&nbsp;||&nbsp;|||</div>
+      <div class="small">Ref <code>VEB44DCB3PX</code> &middot; Valid 17&ndash;21 Sep 2026</div>
+    </div>
+    <p class="muted small">Prototype display only — not a real ticket and not linked to your account. It does not guarantee acceptance by a train company. Real recovery shows your stored eTicket after server PIN verification.</p>
+    <button class="ghost" id="endBtn">End session</button>
+  </div>
+
+  <div class="card">
+    <h2>How this prototype differs from the real service</h2>
+    <ol class="steps small muted">
+      <li>No names, journeys or tickets are shown before the PIN — same rule here.</li>
+      <li>Real PINs are verified server-side with delays and lockouts; here any 6 digits work.</li>
+      <li>Real tickets come from your encrypted stored import; here a fixed sample is shown.</li>
+      <li>Nothing is saved on this phone: close the tab or tap End session when done.</li>
+    </ol>
+  </div>
+</main>
+<script>
+(function(){
+  // Token comes from /r/<token> (served via 404.html on GitHub Pages) or ?t=<token>.
+  var token = "";
+  var m = location.pathname.match(/\/r\/([A-Za-z0-9\-_]+)/);
+  if (m) token = m[1];
+  else {
+    var q = new URLSearchParams(location.search).get("t");
+    if (q) token = q;
+  }
+  var msg = document.getElementById("tokenMsg");
+  if (token) {
+    msg.innerHTML = "Link OK — recovery ID <code>" +
+      token.slice(0, 6) + "&hellip;" + token.slice(-4) +
+      "</code>. Continue below.";
+  } else {
+    msg.innerHTML = "Opened without a recovery link. Scan your QR to arrive with a link, " +
+      "or <a href='?t=demo-token'>try the demo link</a>.";
+  }
+  var pin = document.getElementById("pin"),
+      btn = document.getElementById("unlockBtn"),
+      err = document.getElementById("pinErr"),
+      ticket = document.getElementById("ticketCard");
+  pin.addEventListener("input", function(){
+    pin.value = pin.value.replace(/\D/g,"").slice(0,6);
+    btn.disabled = pin.value.length !== 6;
+    err.hidden = true;
+  });
+  btn.addEventListener("click", function(){
+    if (pin.value.length !== 6) { err.hidden = false; return; }
+    document.getElementById("pinCard").hidden = true;
+    ticket.hidden = false;
+    ticket.scrollIntoView({behavior:"smooth"});
+  });
+  document.getElementById("endBtn").addEventListener("click", function(){
+    pin.value = "";
+    btn.disabled = true;
+    ticket.hidden = true;
+    document.getElementById("pinCard").hidden = false;
+    window.scrollTo({top:0, behavior:"smooth"});
+  });
+})();
+</script>
+</body>
+</html>
