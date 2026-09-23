@@ -143,10 +143,12 @@
       if (!list.length) { err.textContent = "No ticket is currently available in the recovery window."; err.hidden = false; btn.disabled = false; return; }
       // Single-eligible: show first ticket image served per-session (no-store).
       var t = list[0];
+      var sessionId = data.session_id || "";
       document.getElementById("pinCard").hidden = true;
       ticket.hidden = false;
-      var img = "<img alt='Recovered ticket' style='max-width:100%;border-radius:8px' src='" +
-        window.TR_FUNCTIONS_BASE + "/ticket-view?ticket=" + encodeURIComponent(t.id) + "'>";
+      var imgSrc = window.TR_FUNCTIONS_BASE + "/ticket-view?ticket=" + encodeURIComponent(t.id);
+      if (sessionId) imgSrc += "&session_id=" + encodeURIComponent(sessionId);
+      var img = "<img alt='Recovered ticket' style='max-width:100%;border-radius:8px' src='" + imgSrc + "'>";
       ticket.querySelector(".ticket").innerHTML = img +
         "<div class='small'>" + t.origin + " &rarr; " + t.destination + "</div>";
       ticket.scrollIntoView({behavior:"smooth"});
